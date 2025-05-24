@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Família: Nossa Primeira Escola de Amor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive;
+            background-image: url('https://github.com/nekowy/ipm/blob/main/bg.png?raw=true');
+            background-size: cover;
+            backdrop-filter: blur(10px);
+            background-attachment: fixed;
+            animation: cloudMove 60s linear infinite;
+            color: #5c4b6f;
+            /* Roxinho suave para o texto */
+        }
+
+        .sun {
+            background: radial-gradient(circle, #ffe7a0 30%, #ffc46c 100%);
+            box-shadow: 0 0 20px #ffe7a0;
+        }
+
+        header h1 {
+            color: #c084fc;
+            /* Lilás vivo */
+        }
+
+        .btn-download {
+            background-color: #a78bfa;
+            /* Roxinho pastel */
+        }
+
+        .btn-download:hover {
+            background-color: #c4b5fd;
+            /* Um tom mais claro no hover */
+        }
+
+        section.bg-pink-100 {
+            background-color: #f3e8ff;
+            /* Lilás claro */
+            color: #5c4b6f;
+        }
+
+        section.bg-blue-50 {
+            background-color: #e0e7ff;
+            /* Azul clarinho pastel */
+        }
+
+        h2 {
+            color: #a855f7;
+            /* Título em roxo vibrante */
+        }
+
+        h3 {
+            color: #d946ef;
+            /* Rosa vibrante para valores */
+        }
+
+        footer {
+            background-color: #f5d0fe;
+            /* Rosa bem clarinho */
+        }
+
+        footer p {
+            color: #a855f7;
+        }
+
+        /* Pequenos ajustes para o hover e sombras */
+        .shadow {
+            box-shadow: 0 4px 6px rgba(180, 160, 255, 0.3);
+        }
+
+        .rounded-xl {
+            border-radius: 1rem;
+        }
+    </style>
+
+</head>
+
+<body class="min-h-screen">
+    <!-- Sun decoration -->
+    <div class="sun"></div>
+
+    <!-- Header with title and characters -->
+    <header class="pt-10 pb-6 px-4 text-center relative">
+        <div class="flex justify-center items-center mb-4">
+            <img src="https://github.com/nekowy/ipm/blob/main/peppa.png?raw=true" alt="Peppa Pig"
+                class="w-24 h-24 character-hover mr-4">
+            <h1 class="text-4xl md:text-5xl font-bold text-green-300 drop-shadow-lg">
+                Família: Nossa Primeira Escola de Amor
+            </h1>
+            <img src="https://github.com/nekowy/ipm/blob/main/george.png?raw=true" alt="George Pig"
+                class="w-24 h-24 character-hover ml-4">
+        </div>
+        <p class="text-lg text-green-900">Trabalho escolar de Matheus Heráclito da Silva - 9º ano IEPAM</p>
+    </header>
+
+    <!-- Main content -->
+    <main class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Introduction section -->
+        <section class="bg-green-100 text-green-600 p-6 rounded-xl shadow-md mb-12">
+            <h2 class="text-2xl font-bold mb-4 text-center text-green-600">Introdução</h2>
+            <p class="mb-4">A família é nosso primeiro lar de amor, respeito e união. É nela que crescemos e encontramos
+                direção. Valorizar esses laços é essencial para uma vida com sentido.</p>
+        </section>
+
+        <!-- Download section -->
+        <section class="text-center mb-12">
+            <h2 class="text-2xl font-bold mb-8 text-green-600">Baixe o trabalho completo</h2>
+
+            <div class="flex flex-col md:flex-row justify-center items-center gap-8">
+                <!-- Word document -->
+                <div class="flex flex-col items-center">
+                    <img src="https://github.com/nekowy/ipm/blob/main/dad.png?raw=true" alt="Papai Pig"
+                        class="w-32 h-32 mb-4 character-hover">
+                    <button
+                        class="btn-download bg-green-400 hover:bg-green-500 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-all duration-300 flex items-center"
+                        x-ref="https://docs.google.com/document/d/18we1PEddlWpv0HrADYJd9lm6zZo_RiV2/edit?usp=sharing&ouid=115036837062782298665&rtpof=true&sd=true"
+                        x-dn="Apresentação.docx">
+                        <i class="fas fa-file-word text-2xl mr-2"></i>
+                        Documento Word
+                    </button>
+                </div>
+
+                <!-- PowerPoint -->
+                <div class="flex flex-col items-center">
+                    <img src="https://github.com/nekowy/ipm/blob/main/mommy.png?raw=true" alt="Mamãe Pig"
+                        class="w-32 h-32 mb-4 character-hover">
+                    <button
+                        class="btn-download bg-green-400 hover:bg-green-500 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-all duration-300 flex items-center"
+                        x-ref="https://docs.google.com/presentation/d/1eHnhR9EDguLgCS5FSh_xzvi7igiu8Cr2/edit?usp=sharing&ouid=115036837062782298665&rtpof=true&sd=true"
+                        x-dn="Apresentação.pptx">
+                        <i class="fas fa-file-powerpoint text-2xl mr-2"></i>
+                        Apresentação Powerpoint
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Family values section -->
+        <section class="bg-blue-50 p-6 rounded-xl shadow-md">
+            <h2 class="text-2xl font-bold mb-4 text-center text-green-600">Valores Familiares na Peppa Pig</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-green-500 mb-2">Amor Incondicional</h3>
+                    <p>Como quando Peppa faz bagunça e seus pais a corrigem com paciência e carinho.</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-green-500 mb-2">Respeito</h3>
+                    <p>Os irmãos Peppa e George aprendem a compartilhar e respeitar seus espaços.</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-green-500 mb-2">Aprendizado Contínuo</h3>
+                    <p>Cada episódio traz uma nova lição aprendida em família.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-green-200 py-6 px-4 text-center mt-12">
+        <div class="flex justify-center mb-4">
+            <img src="https://github.com/nekowy/ipm/blob/main/peppa.png?raw=true" alt="Família Pig de mãos dadas"
+                class="h-16">
+        </div>
+        <p class="text-sm text-green-600 mt-2">Trabalho escolar de Matheus Heráclito da Silva - 9º ano IEPAM</p>
+    </footer>
+
+    <script>
+        // Simple animation for download buttons
+        document.querySelectorAll('.btn-download').forEach(button => {
+            button.addEventListener('click', () => {
+                const docUrl = button.getAttribute('x-ref');
+                const fileName = button.getAttribute('x-dn');
+
+                // Força o download sem abrir o Docs
+                const a = document.createElement('a');
+                a.href = convertToDownloadLink(docUrl);
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+
+            function convertToDownloadLink(googleUrl) {
+                // Detecta tipo de arquivo com base na URL
+                if (googleUrl.includes('/document/')) {
+                    return googleUrl.replace(/\/edit.*$/, '/export?format=docx');
+                } else if (googleUrl.includes('/presentation/')) {
+                    return googleUrl.replace(/\/edit.*$/, '/export/pptx');
+                } else {
+                    return googleUrl; // fallback
+                }
+            }
+        })
+
+        // Add some fun interaction with characters
+        document.querySelectorAll('.character-hover').forEach(char => {
+            char.addEventListener('mouseover', function () {
+                this.style.transform = 'scale(1.1)';
+            });
+            char.addEventListener('mouseout', function () {
+                this.style.transform = 'scale(1)';
+            });
+        });
+    </script>
+</body>
+
+</html>
