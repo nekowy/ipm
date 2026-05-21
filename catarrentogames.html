@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Olfato</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#020208}
+#bg,#dk{position:fixed;inset:0;width:100%;height:100%}
+#bg{z-index:1}
+#dk{z-index:2;pointer-events:none}
+#hit{position:fixed;inset:0;z-index:3;cursor:none}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="dk"></canvas>
+<div id="hit"></div>
+<script>
+/* ====================================================
+   SETUP
+   ==================================================== */
+const bg=document.getElementById('bg'),bx=bg.getContext('2d');
+const dk=document.getElementById('dk'),dx=dk.getContext('2d');
+const hit=document.getElementById('hit');
+let rebuiltMols = false;
+
+let W,H,T=0;
+let mx=-9999,my=-9999,pmx=-9999,pmy=-9999;
+let portalRev=0,cursorIsPortal=false;
+
+const CANVA_URL='https://canva.link/vt3c3k4pjgyhkp9';
+const FL_R=165;     // flashlight radius
+const IC_R=62;      // icon outer radius (click zone)
+
+let iconX,iconY;
+
+function resize(){
+  W=bg.width=dk.width=window.innerWidth;
+  H=bg.height=dk.height=window.innerHeight;
+  iconX=W/2; iconY=H*0.48;
+  rebuiltMols=true;
+}
+resize();
+window.addEventListener('resize',resize);
+
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY});
+
+hit.addEventListener('click',e=>{
+  if(Math.hypot(e.clientX-iconX,e.clientY-iconY)<IC_R+8&&portalRev>.5)
+    window.open(CANVA_URL,'_blank');
+});
+
+/* ====================================================
+   PALETTE
+   ==================================================== */
+const C={
+  amber:[255,179,71],
+  violet:[168,85,247],
+  cyan:[34,211,238],
+  jade:[74,222,128],
+  rose:[255,110,180],
+};
+const CLIST=Object.values(C);
+function rgba([r,g,b],a){return `rgba(${r},${g},${b},${a})`}
+
+/* ====================================================
+   STAR FIELD
+   ==================================================== */
+const STARS=Array.from({length:130},()=>({
+  x:Math.random(),y:Math.random(),
+  r:Math.random()*1.1+.15,
+  a:Math.random()*.28+.04,
+  ph:Math.random()*6.28,
+  sp:Math.random()*.01+.003
+}));
+
+function drawStars(){
+  STARS.forEach(s=>{
+    const a=s.a*(.55+Math.sin(s.ph+T*s.sp)*.45);
+    bx.beginPath();bx.arc(s.x*W,s.y*H,s.r,0,6.28);
+    bx.fillStyle=`rgba(255,255,255,${a})`;bx.fill();
+  });
+}
+
+/* ====================================================
+   ODORANT PARTICLES
+   ==================================================== */
+class Dot{
+  constructor(spread){
+    const c=CLIST[Math.random()*CLIST.length|0];
+    this.r=c[0];this.g=c[1];this.b=c[2];
+    this.x=Math.random()*W;
+    this.y=spread?Math.random()*H:H+20;
+    this.sz=Math.random()*2.6+.3;
+    this.vy=-(Math.random()*.45+.12);
+    this.vx=(Math.random()-.5)*.28;
+    this.al=Math.random()*.55+.07;
+    this.wb=Math.random()*6.28;
+    this.wbA=Math.random()*.55+.1;
+    this.wbF=Math.random()*.018+.006;
+  }
+  tick(){
+    this.wb+=this.wbF;
+    this.x+=Math.sin(this.wb)*this.wbA+this.vx;
+    this.y+=this.vy;
+    if(this.y<-8) Object.assign(this,new Dot(false));
+  }
+  draw(){
+    const{x,y,sz,r,g,b,al}=this;
+    bx.beginPath();bx.arc(x,y,sz,0,6.28);
+    bx.fillStyle=rgba([r,g,b],al);bx.fill();
+    if(sz>1.4){
+      const g2=bx.createRadialGradient(x,y,0,x,y,sz*5.5);
+      g2.addColorStop(0,rgba([r,g,b],al*.28));
+      g2.addColorStop(1,rgba([r,g,b],0));
+      bx.beginPath();bx.arc(x,y,sz*5.5,0,6.28);
+      bx.fillStyle=g2;bx.fill();
+    }
+  }
+}
+const DOTS=Array.from({length:360},()=>new Dot(true));
+
+/* ====================================================
+   CURSOR TRAIL
+   ==================================================== */
+class Trail{
+  constructor(x,y){
+    const c=CLIST[Math.random()*CLIST.length|0];
+    this.x=x+(Math.random()-.5)*8;this.y=y+(Math.random()-.5)*8;
+    this.r=c[0];this.g=c[1];this.b=c[2];
+    this.life=1;this.dec=Math.random()*.045+.018;
+    this.vx=(Math.random()-.5)*.7;this.vy=-(Math.random()*.4+.15);
+    this.sz=Math.random()*1.8+.4;
+  }
+  tick(){this.x+=this.vx;this.y+=this.vy;this.life-=this.dec;}
+  draw(){
+    if(this.life<=0)return;
+    bx.beginPath();bx.arc(this.x,this.y,this.sz*this.life,0,6.28);
+    bx.fillStyle=rgba([this.r,this.g,this.b],this.life*.45);bx.fill();
+  }
+  get dead(){return this.life<=0}
+}
+let trails=[];
+
+/* ====================================================
+   SCENT MOLECULES (floating bond structures)
+   ==================================================== */
+class Mol{
+  constructor(xr,yr,ci,sc,ph){
+    this.ox=0;this.oy=0;
+    this.xr=xr;this.yr=yr;
+    this.col=CLIST[ci];this.sc=sc;this.ph=ph;
+    this.bonds=2+(Math.random()*3|0);
+    this.bL=25+Math.random()*18;
+    this.rot=Math.random()*6.28;
+    this.rS=(Math.random()-.5)*.007;
+    this.rx=(Math.random()-.5)*58;
+    this.ry=(Math.random()-.5)*40;
+  }
+  setPos(){this.ox=this.xr*W;this.oy=this.yr*H}
+  draw(){
+    const x=this.ox+Math.sin(T*.009+this.ph)*this.rx;
+    const y=this.oy+Math.cos(T*.011+this.ph)*this.ry;
+    const rot=this.rot+T*this.rS;
+    const[r,g,b]=this.col;
+    const a=.16+Math.sin(T*.017+this.ph)*.05;
+    bx.save();bx.translate(x,y);bx.rotate(rot);bx.scale(this.sc,this.sc);
+    // center glow
+    const gc=bx.createRadialGradient(0,0,0,0,0,22);
+    gc.addColorStop(0,rgba([r,g,b],a*.9));gc.addColorStop(1,rgba([r,g,b],0));
+    bx.beginPath();bx.arc(0,0,22,0,6.28);bx.fillStyle=gc;bx.fill();
+    // center atom
+    bx.beginPath();bx.arc(0,0,6,0,6.28);bx.fillStyle=rgba([r,g,b],a+.12);bx.fill();
+    // bonds
+    for(let i=0;i<this.bonds;i++){
+      const ang=(i/this.bonds)*6.28;
+      const bx2=Math.cos(ang)*this.bL,by=Math.sin(ang)*this.bL;
+      bx.beginPath();bx.moveTo(0,0);bx.lineTo(bx2,by);
+      bx.strokeStyle=rgba([r,g,b],a);bx.lineWidth=.9;bx.stroke();
+      bx.beginPath();bx.arc(bx2,by,4.2,0,6.28);bx.fillStyle=rgba([r,g,b],a+.08);bx.fill();
+    }
+    bx.restore();
+  }
+}
+const MOL_DEFS=[
+  [.07,.26,0,.78,0],[.89,.21,1,.92,1.5],[.11,.73,2,.66,3],[.83,.67,3,.82,4.5],
+  [.48,.88,0,.72,2],[.24,.11,2,.56,5],[.73,.14,1,.88,1],[.14,.46,3,.71,7],
+  [.84,.44,2,.67,8],[.34,.79,1,.81,9],[.66,.77,0,.73,10],[.5,.5,4,.52,6],
+  [.92,.5,0,.6,11],[.05,.5,1,.65,12],[.5,.05,2,.7,13],
+];
+let MOLS=[];
+function buildMols(){MOLS=MOL_DEFS.map(d=>{const m=new Mol(...d);m.setPos();return m});}
+
+/* ====================================================
+   NEURAL FIBERS
+   ==================================================== */
+class Fiber{
+  constructor(){this.reset();}
+  reset(){
+    this.p=Math.random();this.sp=Math.random()*.0028+.001;
+    const cx=W/2,sp=(Math.random()-.5)*W*.33;
+    this.pts=[{x:cx+sp*.9,y:H*.93},{x:cx+sp*.6,y:H*.66},{x:cx+sp*.3,y:H*.4},{x:cx+sp*.08,y:H*.2}];
+    const ci=Math.random()*CLIST.length|0;
+    this.col=CLIST[ci];this.lw=Math.random()*.65+.18;this.tL=Math.random()*.2+.07;
+  }
+  getP(t){
+    const n=this.pts.length-1;
+    const i=Math.min(t*n|0,n-1),f=t*n-i;
+    return{x:this.pts[i].x+(this.pts[i+1].x-this.pts[i].x)*f,
+           y:this.pts[i].y+(this.pts[i+1].y-this.pts[i].y)*f};
+  }
+  tick(){this.p+=this.sp;if(this.p>1.18)this.reset();}
+  draw(){
+    const[r,g,b]=this.col,end=Math.min(this.p,1),st=Math.max(0,end-this.tL);
+    bx.beginPath();
+    for(let i=0;i<=36;i++){
+      const pt=this.getP(st+(end-st)*(i/36));
+      i===0?bx.moveTo(pt.x,pt.y):bx.lineTo(pt.x,pt.y);
+    }
+    bx.strokeStyle=rgba([r,g,b],.14);bx.lineWidth=this.lw;bx.stroke();
+    if(this.p<=1){
+      const pt=this.getP(this.p);
+      const grd=bx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,7);
+      grd.addColorStop(0,rgba([r,g,b],.92));grd.addColorStop(1,rgba([r,g,b],0));
+      bx.beginPath();bx.arc(pt.x,pt.y,7,0,6.28);bx.fillStyle=grd;bx.fill();
+      bx.beginPath();bx.arc(pt.x,pt.y,2.2,0,6.28);bx.fillStyle='rgba(255,255,255,.88)';bx.fill();
+    }
+  }
+}
+const FIBERS=Array.from({length:26},()=>new Fiber());
+
+/* ====================================================
+   OLFACTORY BULB
+   ==================================================== */
+function drawBulb(){
+  const cx=W/2,cy=H*.165;
+  const pulse=1+Math.sin(T*.024)*.055;
+  const R=Math.min(W,H)*.067*pulse;
+  // layered outer glow
+  for(let i=5;i>=1;i--){
+    const g=bx.createRadialGradient(cx,cy,R*.2,cx,cy,R*i*1.45);
+    g.addColorStop(0,rgba(C.violet,.09/i));g.addColorStop(1,rgba(C.violet,0));
+    bx.beginPath();bx.arc(cx,cy,R*i*1.45,0,6.28);bx.fillStyle=g;bx.fill();
+  }
+  // body
+  const bg2=bx.createRadialGradient(cx-R*.2,cy-R*.28,R*.04,cx,cy,R);
+  bg2.addColorStop(0,'rgba(235,200,255,.83)');
+  bg2.addColorStop(.38,'rgba(168,85,247,.62)');
+  bg2.addColorStop(.78,'rgba(88,28,175,.32)');
+  bg2.addColorStop(1,'rgba(40,8,80,.04)');
+  bx.beginPath();bx.ellipse(cx,cy,R,R*1.2,0,0,6.28);bx.fillStyle=bg2;bx.fill();
+  // glomeruli ring
+  for(let i=0;i<14;i++){
+    const ang=(i/14)*6.28+T*.0038;
+    const gx=cx+Math.cos(ang)*R*.86,gy=cy+Math.sin(ang)*R*.7;
+    const gs=R*.11+Math.sin(T*.032+i)*R*.028;
+    const al=.48+Math.sin(T*.034+i*.78)*.26;
+    const gl=bx.createRadialGradient(gx,gy,0,gx,gy,gs*2.2);
+    gl.addColorStop(0,`rgba(255,155,255,${al})`);gl.addColorStop(1,rgba(C.violet,0));
+    bx.beginPath();bx.arc(gx,gy,gs*2.2,0,6.28);bx.fillStyle=gl;bx.fill();
+  }
+  // laminar layers
+  bx.save();bx.beginPath();bx.ellipse(cx,cy,R,R*1.2,0,0,6.28);bx.clip();
+  for(let i=-5;i<=5;i++){
+    bx.beginPath();bx.ellipse(cx,cy+i*R*.17,R*.88,R*.055,0,0,6.28);
+    bx.strokeStyle=`rgba(210,185,255,${.065-Math.abs(i)*.008})`;
+    bx.lineWidth=.5;bx.stroke();
+  }
+  bx.restore();
+}
+
+/* ====================================================
+   CRIBRIFORM PLATE
+   ==================================================== */
+function drawCribriform(){
+  const cx=W/2,cy=H*.31,pw=Math.min(W*.28,210);
+  for(let row=0;row<4;row++) for(let col=0;col<11;col++){
+    const x=cx-pw/2+(col/10)*pw,y=cy-12+(row/3)*24;
+    const al=.1+Math.sin(T*.02+col*.4+row*.8)*.035;
+    bx.beginPath();bx.arc(x,y,2,0,6.28);
+    bx.fillStyle=`rgba(200,175,255,${al})`;bx.fill();
+  }
+  bx.beginPath();bx.moveTo(cx-pw/2-25,H*.31);bx.lineTo(cx+pw/2+25,H*.31);
+  bx.strokeStyle='rgba(200,175,255,.045)';bx.lineWidth=9;bx.stroke();
+}
+
+/* ====================================================
+   OLFACTORY EPITHELIUM
+   ==================================================== */
+function drawEpithelium(){
+  const cy=H*.71,pw=W*.68,cx=W/2;
+  bx.beginPath();
+  for(let x=0;x<=W;x+=4){
+    const y=cy+Math.sin((x/W)*Math.PI*4+T*.012)*7;
+    x===0?bx.moveTo(x,y):bx.lineTo(x,y);
+  }
+  bx.strokeStyle='rgba(74,222,128,.065)';bx.lineWidth=11;bx.stroke();
+  const nC=22;
+  for(let i=0;i<nC;i++){
+    const xc=cx-pw/2+(i/(nC-1))*pw;
+    const yB=cy+Math.sin((xc/W)*Math.PI*4+T*.012)*7;
+    const ph=T*.021+i*.4,act=Math.sin(ph)>.3;
+    const al=act?.3:.09;
+    const[r,g,b]=CLIST[i%CLIST.length];
+    bx.beginPath();bx.ellipse(xc,yB+10,3.2,8.5,0,0,6.28);
+    bx.fillStyle=rgba([r,g,b],al);bx.fill();
+    for(let c=0;c<3;c++){
+      const cx2=xc+(c-1)*3,tip=yB-11-Math.sin(ph+c*.5)*4.5;
+      bx.beginPath();bx.moveTo(cx2,yB);
+      bx.bezierCurveTo(cx2+(c-1)*4,yB-5,cx2+(c-1)*5,tip+4,cx2+(c-1)*5,tip);
+      bx.strokeStyle=rgba([r,g,b],al*.65);bx.lineWidth=.7;bx.stroke();
+    }
+    bx.beginPath();bx.moveTo(xc,yB+19);
+    bx.bezierCurveTo(xc,yB+38,xc+Math.sin(i)*9,yB+58,xc,yB+76);
+    bx.strokeStyle=rgba([r,g,b],al*.32);bx.lineWidth=.5;bx.stroke();
+  }
+}
+
+/* ====================================================
+   NERVE CONNECTIONS
+   ==================================================== */
+function drawNerves(){
+  const cx=W/2,bY=H*.22,pY=H*.31;
+  for(let i=0;i<8;i++){
+    const x=cx+(i/7-.5)*W*.19;
+    const al=.05+Math.sin(T*.024+i*.5)*.022;
+    bx.beginPath();bx.moveTo(x,pY);
+    bx.bezierCurveTo(x,pY-22,cx+(x-cx)*.28,bY+22,cx,bY+16);
+    bx.strokeStyle=`rgba(200,155,255,${al})`;bx.lineWidth=.65;bx.stroke();
+  }
+}
+
+/* ====================================================
+   SCENT PLUMES
+   ==================================================== */
+function drawPlumes(){
+  for(let i=0;i<5;i++){
+    const x=W*(.13+i*.185),bY=H*.95,h=H*.2+Math.sin(T*.01+i)*.04*H;
+    const[r,g,b]=CLIST[i%CLIST.length];
+    for(let l=0;l<9;l++){
+      const f=l/8,w=(1-f*f)*W*.034,y=bY-f*h;
+      const al=(1-f)*.052,wav=Math.sin(T*.017+i*1.2+f*3)*(w*.3);
+      const g2=bx.createRadialGradient(x+wav,y,0,x+wav,y,w);
+      g2.addColorStop(0,rgba([r,g,b],al));g2.addColorStop(1,rgba([r,g,b],0));
+      bx.beginPath();bx.arc(x+wav,y,w,0,6.28);bx.fillStyle=g2;bx.fill();
+    }
+  }
+}
+
+/* ====================================================
+   AIR WAVES
+   ==================================================== */
+function drawWaves(){
+  for(let w=0;w<6;w++){
+    const yB=H*.77-w*26,amp=13-w*1.4,al=.048-w*.006,ph=T*.013+w*.5;
+    bx.beginPath();
+    for(let x=0;x<=W;x+=6){
+      const y=yB+Math.sin((x/W)*Math.PI*3+ph)*amp;
+      x===0?bx.moveTo(x,y):bx.lineTo(x,y);
+    }
+    bx.strokeStyle=rgba(C.cyan,al);bx.lineWidth=1;bx.stroke();
+  }
+}
+
+/* ====================================================
+   NEBULA BACKGROUND
+   ==================================================== */
+function drawNebula(){
+  const cx=W/2;
+  const n1=bx.createRadialGradient(cx,H*.17,0,cx,H*.42,H*.54);
+  n1.addColorStop(0,'rgba(75,18,155,.12)');n1.addColorStop(.42,'rgba(38,8,95,.05)');n1.addColorStop(1,'rgba(0,0,0,0)');
+  bx.fillStyle=n1;bx.fillRect(0,0,W,H);
+  const n2=bx.createRadialGradient(cx*.38,H*.87,0,cx*.38,H*.87,W*.36);
+  n2.addColorStop(0,'rgba(255,130,45,.042)');n2.addColorStop(1,'rgba(0,0,0,0)');
+  bx.fillStyle=n2;bx.fillRect(0,0,W,H);
+  const n3=bx.createRadialGradient(W*.82,H*.58,0,W*.82,H*.58,W*.3);
+  n3.addColorStop(0,'rgba(34,211,238,.032)');n3.addColorStop(1,'rgba(0,0,0,0)');
+  bx.fillStyle=n3;bx.fillRect(0,0,W,H);
+}
+
+/* ====================================================
+   LANTERN WARM TINT (on BG canvas)
+   ==================================================== */
+function drawLanternTint(){
+  if(mx<-900)return;
+  const wg=bx.createRadialGradient(mx,my,0,mx,my,FL_R*.75);
+  wg.addColorStop(0,'rgba(255,155,55,.065)');
+  wg.addColorStop(.6,'rgba(255,120,40,.02)');
+  wg.addColorStop(1,'rgba(255,100,30,0)');
+  bx.fillStyle=wg;bx.beginPath();bx.arc(mx,my,FL_R*.75,0,6.28);bx.fill();
+}
+
+/* ====================================================
+   PORTAL / LINK ICON (canvas-drawn)
+   ==================================================== */
+function drawPortal(){
+  if(portalRev<.005)return;
+  const cx=iconX,cy=iconY,r=portalRev;
+  const R=IC_R,pulse=1+Math.sin(T*.038)*.045;
+
+  // multi-layer outer glow
+  for(let i=4;i>=1;i--){
+    const g=bx.createRadialGradient(cx,cy,R*.15,cx,cy,R*i*1.35);
+    g.addColorStop(0,`rgba(255,190,80,${r*.18/i})`);
+    g.addColorStop(.5,`rgba(255,140,40,${r*.06/i})`);
+    g.addColorStop(1,'rgba(255,140,40,0)');
+    bx.beginPath();bx.arc(cx,cy,R*i*1.35,0,6.28);bx.fillStyle=g;bx.fill();
+  }
+
+  // outer dashed ring - rotating
+  bx.save();bx.translate(cx,cy);bx.rotate(T*.009);
+  bx.beginPath();bx.arc(0,0,R*pulse,0,6.28);
+  bx.setLineDash([7,5]);bx.strokeStyle=`rgba(255,200,100,${r*.72})`;
+  bx.lineWidth=1.6;bx.stroke();bx.setLineDash([]);bx.restore();
+
+  // middle ring - counter rotate
+  bx.save();bx.translate(cx,cy);bx.rotate(-T*.014);
+  bx.beginPath();bx.arc(0,0,R*.75*pulse,0,6.28);
+  bx.setLineDash([4,8]);bx.strokeStyle=`rgba(255,220,140,${r*.48})`;
+  bx.lineWidth=.85;bx.stroke();bx.setLineDash([]);bx.restore();
+
+  // solid inner ring
+  bx.beginPath();bx.arc(cx,cy,R*.55,0,6.28);
+  bx.strokeStyle=`rgba(255,185,80,${r*.62})`;bx.lineWidth=1;bx.stroke();
+
+  // center fill gradient
+  const cf=bx.createRadialGradient(cx-R*.1,cy-R*.12,0,cx,cy,R*.53);
+  cf.addColorStop(0,`rgba(255,240,200,${r*.22})`);
+  cf.addColorStop(.5,`rgba(255,165,55,${r*.09})`);
+  cf.addColorStop(1,'rgba(0,0,0,0)');
+  bx.beginPath();bx.arc(cx,cy,R*.53,0,6.28);bx.fillStyle=cf;bx.fill();
+
+  // arrow icon (↗ — external link)
+  bx.save();bx.translate(cx,cy);
+  bx.strokeStyle=`rgba(255,235,170,${r*.92})`;
+  bx.lineWidth=2.8;bx.lineCap='round';bx.lineJoin='round';
+  // box part of link icon
+  bx.beginPath();
+  bx.moveTo(-16,16);bx.lineTo(-16,-8);bx.lineTo(8,-8);
+  bx.stroke();
+  // arrow
+  bx.beginPath();
+  bx.moveTo(-8,-8);bx.lineTo(16,-16);bx.lineTo(8,8);
+  bx.stroke();
+  // arrow tip cross
+  bx.beginPath();bx.moveTo(-2,-2);bx.lineTo(16,-16);bx.stroke();
+  bx.restore();
+
+  // 8 orbiting energy dots
+  for(let i=0;i<8;i++){
+    const ang=(i/8)*6.28+T*.016;
+    const ox=cx+Math.cos(ang)*R*pulse,oy=cy+Math.sin(ang)*R*pulse;
+    const da=r*(.58+Math.sin(T*.055+i)*.38);
+    const dg=bx.createRadialGradient(ox,oy,0,ox,oy,5.5);
+    dg.addColorStop(0,`rgba(255,230,160,${da})`);
+    dg.addColorStop(1,'rgba(255,179,71,0)');
+    bx.beginPath();bx.arc(ox,oy,5.5,0,6.28);bx.fillStyle=dg;bx.fill();
+    bx.beginPath();bx.arc(ox,oy,1.5,0,6.28);bx.fillStyle=`rgba(255,255,220,${da*.8})`;bx.fill();
+  }
+
+  // inner pulse ring
+  const pr=(T*.022%1);
+  bx.beginPath();bx.arc(cx,cy,R*.55+pr*R*.6,0,6.28);
+  bx.strokeStyle=`rgba(255,200,80,${r*(1-pr)*.25})`;
+  bx.lineWidth=1;bx.stroke();
+}
+
+/* ====================================================
+   ICON HINT (barely visible even through dark)
+   ==================================================== */
+function drawIconHint(){
+  const pulse=.5+Math.sin(T*.03)*.5;
+  const g=bx.createRadialGradient(iconX,iconY,0,iconX,iconY,45);
+  g.addColorStop(0,`rgba(255,179,71,${.06*pulse})`);
+  g.addColorStop(1,'rgba(255,179,71,0)');
+  bx.beginPath();bx.arc(iconX,iconY,45,0,6.28);bx.fillStyle=g;bx.fill();
+}
+
+/* ====================================================
+   DARKNESS OVERLAY WITH LANTERN HOLE
+   ==================================================== */
+function drawDarkness(){
+  dx.clearRect(0,0,W,H);
+  dx.fillStyle='rgba(2,2,8,0.958)';
+  dx.fillRect(0,0,W,H);
+
+  if(mx<-900)return;
+
+  // punch lantern hole
+  dx.save();
+  dx.globalCompositeOperation='destination-out';
+  const fl=dx.createRadialGradient(mx,my,0,mx,my,FL_R);
+  fl.addColorStop(0,'rgba(0,0,0,.96)');
+  fl.addColorStop(.5,'rgba(0,0,0,.75)');
+  fl.addColorStop(.8,'rgba(0,0,0,.28)');
+  fl.addColorStop(1,'rgba(0,0,0,0)');
+  dx.fillStyle=fl;dx.beginPath();dx.arc(mx,my,FL_R,0,6.28);dx.fill();
+  dx.restore();
+
+  // subtle light flare edge
+  dx.save();
+  dx.globalCompositeOperation='source-over';
+  const fe=dx.createRadialGradient(mx,my,FL_R*.82,mx,my,FL_R);
+  fe.addColorStop(0,'rgba(255,140,60,0)');
+  fe.addColorStop(.7,'rgba(255,120,40,.015)');
+  fe.addColorStop(1,'rgba(255,100,30,.04)');
+  dx.fillStyle=fe;dx.beginPath();dx.arc(mx,my,FL_R,0,6.28);dx.fill();
+  dx.restore();
+}
+
+/* ====================================================
+   PORTAL REVEAL + CURSOR
+   ==================================================== */
+function updatePortal(){
+  const dist=Math.hypot(mx-iconX,my-iconY);
+  const visible=dist<FL_R*.65;
+  const isOver=dist<IC_R+6;
+  const target=visible?Math.min(1,(FL_R*.65-dist)/(FL_R*.35)):0;
+  portalRev+=(target-portalRev)*.07;
+  cursorIsPortal=isOver&&portalRev>.4;
+  hit.style.cursor=cursorIsPortal?'pointer':'none';
+}
+
+/* ====================================================
+   CURSOR CROSSHAIR (drawn on bg canvas)
+   ==================================================== */
+function drawCursor(){
+  if(mx<-900)return;
+  if(cursorIsPortal)return; // hide crosshair when on portal
+  const sz=12,al=.55;
+  bx.save();
+  bx.strokeStyle=`rgba(255,200,130,${al})`;bx.lineWidth=1;
+  // cross
+  bx.beginPath();bx.moveTo(mx-sz,my);bx.lineTo(mx+sz,my);bx.stroke();
+  bx.beginPath();bx.moveTo(mx,my-sz);bx.lineTo(mx,my+sz);bx.stroke();
+  // dot
+  bx.beginPath();bx.arc(mx,my,2.5,0,6.28);bx.fillStyle=`rgba(255,210,140,${al+.2})`;bx.fill();
+  // outer ring
+  bx.beginPath();bx.arc(mx,my,8,0,6.28);
+  bx.strokeStyle=`rgba(255,190,100,${al*.5})`;bx.lineWidth=.7;bx.stroke();
+  bx.restore();
+}
+
+/* ====================================================
+   TRAIL EMISSION
+   ==================================================== */
+function emitTrails(){
+  const d=Math.hypot(mx-pmx,my-pmy);
+  if(d>2.5){
+    for(let i=0;i<2;i++)trails.push(new Trail(mx,my));
+    pmx=mx;pmy=my;
+  }
+  trails=trails.filter(t=>!t.dead);
+}
+
+/* ====================================================
+   MAIN LOOP
+   ==================================================== */
+function frame(){
+  if(rebuiltMols){buildMols();rebuiltMols=false;}
+
+  // BG canvas
+  bx.clearRect(0,0,W,H);
+  bx.fillStyle='#020208';bx.fillRect(0,0,W,H);
+
+  drawNebula();
+  drawStars();
+  drawWaves();
+  drawPlumes();
+
+  FIBERS.forEach(f=>{f.tick();f.draw();});
+  MOLS.forEach(m=>m.draw());
+
+  drawEpithelium();
+  drawCribriform();
+  drawNerves();
+  drawBulb();
+
+  DOTS.forEach(d=>{d.tick();d.draw();});
+
+  drawLanternTint();
+  drawIconHint();
+  drawPortal();
+
+  emitTrails();
+  trails.forEach(t=>{t.tick();t.draw();});
+  drawCursor();
+
+  // Darkness overlay
+  drawDarkness();
+  updatePortal();
+
+  T++;
+  requestAnimationFrame(frame);
+}
+
+// Stagger fiber progress
+FIBERS.forEach((f,i)=>{f.p=i/FIBERS.length;});
+
+frame();
+</script>
+</body>
+</html>
